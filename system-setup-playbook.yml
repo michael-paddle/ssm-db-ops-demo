@@ -1,0 +1,47 @@
+---
+- vars:
+  vars_file_name: default_vars.yml
+
+- hosts: localhost
+  tasks:
+    - name: identify image for webservers
+      ec2_ami_facts:
+	owner: amazon
+	filters:
+	   architecture: x86_64
+	   is_public: true
+	   hypervisor: xen
+	   image-type: machine
+	   state: available
+	   virtualization-type: hvm
+      register: ami_facts_return
+
+    - name: create web servers
+      ec2:
+	image: ami_facts_return.images[0].image_id
+	assign_public_ip: yes
+	count: 3
+	count_tag: 'type=ansible_demo_webserver'
+	exact_count: 3
+	group: ansible_demo_webserver
+	instance_initiated_shutdown_behavior: terminate
+	instance_tags:
+	    type:ansible_demo_webserver
+
+      debug: msg="{{ lookup('aws_ssm', '/', region='us-east-2', bypath=True, recursive=True ) }}"
+
+- hosts: webservers
+  handlers:
+  - name: database password changed
+    copy: 
+      content: "{{ 'dbservers.mydomain.example.com:5432:main_db:my_user:' ~ new_db_password }}"
+      dest: /etc/appdb_pgpass
+
+- hosts: db_servers
+  handlers: database password changed
+  - name database password changed
+    postgresql_user:
+        login_host: dbservers.mydomain.example.com
+        login_user: my_user
+        login_password: "{{ new_db_password }}"
+        port: 5432
