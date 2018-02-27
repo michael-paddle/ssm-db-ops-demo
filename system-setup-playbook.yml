@@ -1,47 +1,120 @@
 ---
-- vars:
-  vars_file_name: default_vars.yml
-
 - hosts: localhost
+  connection: local
+  vars:
+    rds_instance_name: demo-rds
+    parampath: /michael-paddle/demo/
+    vars_file_name: default_vars.yml
+    new_master_password: "{{ lookup( 'password', '/dev/null' ) }}"
+    old_db_master_password: "{{ lookup('aws_ssm', parampath ~ 'db_master_password', region='us-east-2', ) }}"
+    new_db_password: "{{ lookup( 'password', '/dev/null' ) }}"
+    old_db_password: "{{ lookup('aws_ssm', parampath ~ 'db_password', region='us-east-2', ) }}"
+    db_password: "{{ old_db_password | default(new_db_password) }}"
+    db_master_password: "{{ old_db_master_password | default(new_db_master_password) }}"
   tasks:
+
+    - shell: "ls -l /Users/michael-mbp/.aws/ ; whoami ; env; ls -l  /root/.aws"
+      register: result
+
+    - name: show
+      debug:
+        msg: "listing of creds and other details: {{ result }}"
+
+
+    - name: show what account we are using for debugging
+      debug:
+       msg: "account info: {{ lookup('aws_account_attribute', wantlist='true') }}"
+
+    - name: set the master password in the store to a new value
+      aws_ssm_parameter_store:
+        name: parampath ~ '/db_master_password'
+        value: '{{new_db_master_password}}'
+        secure_string: True
+        overwrite: False
+        string_type: SecureString
+      notify: database password changed
+      when: old_db_master_password is undefined
+
+    - name: set the db password in the store to a new value
+      aws_ssm_parameter_store:
+        name: parampath ~ '/db_password'
+        value: '{{new_db_password}}'
+        secure_string: True
+        overwrite: False
+        string_type: SecureString
+      notify: database password changed
+      when: old_db_password is undefined
+
+
+    - name: assert parameters match
+      assert:
+        that:
+          - "db_password == '{{ lookup('aws_ssm', parampath ~ 'db_password', region='us-east-2', ) }}'"
+          - "db_master_password == '{{ lookup('aws_ssm', parampath ~ 'db_master_password', region='us-east-2', ) }}'"
+
     - name: identify image for webservers
       ec2_ami_facts:
-	owner: amazon
-	filters:
-	   architecture: x86_64
-	   is_public: true
-	   hypervisor: xen
-	   image-type: machine
-	   state: available
-	   virtualization-type: hvm
+        region: us-east-1
+        owner: amazon
+        filters:
+         architecture: x86_64
+#         is_public: 'true'
+         name: "amzn-ami-hvm-2017.09.1*x86_64-gp2"
+#         name: "amzn-*2017.09*"
+         hypervisor: xen
+         image-type: machine
+         state: available
+         virtualization-type: hvm
       register: ami_facts_return
 
     - name: create web servers
       ec2:
-	image: ami_facts_return.images[0].image_id
-	assign_public_ip: yes
-	count: 3
-	count_tag: 'type=ansible_demo_webserver'
-	exact_count: 3
-	group: ansible_demo_webserver
-	instance_initiated_shutdown_behavior: terminate
-	instance_tags:
-	    type:ansible_demo_webserver
+        region: us-east-1
+        image: "{{ami_facts_return.images[0].image_id}}"
+#        assign_public_ip: yes
+#        count: 3
+        count_tag:
+          type: ansible_demo_webserver
+        key_name: "deployer-key"
+        exact_count: 3
+#        group: ansible_demo_webserver
+        user_data: "shutdown -h 300 \n"
+        instance_initiated_shutdown_behavior: terminate
+        instance_tags:
+            type: ansible_demo_webserver
 
-      debug: msg="{{ lookup('aws_ssm', '/', region='us-east-2', bypath=True, recursive=True ) }}"
+    - name: create rds instance
+      rds_instance:
+        id: "{{ rds_instance_name }}"
+        wait_timeout: 1200
+        wait: yes
+        size: 5
+        db_name: actual_db
+        db_instance_class: db.t2.micro
+        engine: postgres
+        master_username: db_master
+        master_user_password: "world123$$"
+        region: us-east-1
+        tags:
+          TagOne: hello
+          TagTwo: world
+      register: rds_instance
 
-- hosts: webservers
-  handlers:
-  - name: database password changed
-    copy: 
-      content: "{{ 'dbservers.mydomain.example.com:5432:main_db:my_user:' ~ new_db_password }}"
-      dest: /etc/appdb_pgpass
+
 
 - hosts: db_servers
-  handlers: database password changed
-  - name database password changed
+  handlers:
+  - name: database password changed
     postgresql_user:
         login_host: dbservers.mydomain.example.com
         login_user: my_user
         login_password: "{{ new_db_password }}"
         port: 5432
+
+- hosts: tag___type____ansible_demo_webserver__
+  handlers:
+  - name: database password changed
+    copy:
+      content: "{{ 'dbservers.mydomain.example.com:5432:main_db:my_user:' ~ new_db_password }}"
+      dest: /etc/appdb_pgpass
+

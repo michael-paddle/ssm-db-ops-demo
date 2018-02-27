@@ -10,10 +10,10 @@
     - name: set the password in the store to a new value
       asw_ssm_parameter_store:
         name: parampath ~ '/db_password'
-	value: '{{new_db_password}}'
-	secure_string: True
-	overwrite: True
-	string_type: SecureString
+        value: '{{new_db_password}}'
+        secure_string: True
+        overwrite: True
+        string_type: SecureString
       notify: database password changed
 
 - hosts: webservers
