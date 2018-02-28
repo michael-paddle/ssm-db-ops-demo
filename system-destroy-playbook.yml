@@ -1,0 +1,44 @@
+---
+- hosts: localhost
+  connection: local
+  vars:
+    rds_instance_name: demo-rds
+
+
+  tasks:
+    - name: identify image for webservers
+      ec2_ami_facts:
+        region: us-east-1
+        owner: amazon
+        filters:
+         architecture: x86_64
+#         is_public: 'true'
+         name: "amzn-ami-hvm-2017.09.1*x86_64-gp2"
+#         name: "amzn-*2017.09*"
+         hypervisor: xen
+         image-type: machine
+         state: available
+         virtualization-type: hvm
+      register: ami_facts_return
+
+    - name: destroy web servers
+      ec2:
+        image: "{{ami_facts_return.images[0].image_id}}"
+        region: us-east-1
+        count_tag:
+          type: ansible_demo_webserver
+        key_name: "deployer-key"
+        exact_count: 0
+        instance_initiated_shutdown_behavior: terminate
+        instance_tags:
+            type: ansible_demo_webserver
+
+    - name: destroy rds instance
+      rds_instance:
+        state: absent
+        id: "{{ rds_instance_name }}"
+        wait_timeout: 1200
+        wait: yes
+        size: 5
+        region: us-east-1
+      register: rds_destroy
