@@ -20,6 +20,7 @@
          state: available
          virtualization-type: hvm
       register: ami_facts_return
+      tags: host
 
     - name: destroy web servers
       ec2:
@@ -32,6 +33,7 @@
         instance_initiated_shutdown_behavior: terminate
         instance_tags:
             type: ansible_demo_webserver
+      tags: host
 
     - name: destroy rds instance
       rds_instance:
@@ -41,4 +43,4 @@
         wait: yes
         size: 5
         region: us-east-1
-      register: rds_destroy
+        register: rds_destroy

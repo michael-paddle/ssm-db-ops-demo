@@ -1,0 +1,41 @@
+---
+- hosts: localhost
+  vars:
+    # new_master_password: "{{ lookup( 'password', '/dev/null' ) }}"
+    # old_db_master_password: "{{ lookup('aws_ssm', parampath ~ 'db_master_password', region='us-east-2', ) }}"
+    parampath: /michael-paddle/demo/
+    new_db_password: "{{ lookup( 'password', '/dev/null' ) }}"
+    old_db_password: "{{ lookup('aws_ssm', parampath ~ 'db_password', region='us-east-2', ) }}"
+    db_password: "{{ old_db_password | default(new_db_password) }}"
+    # db_master_password: "{{ old_db_master_password | default(new_db_master_password) }}"
+
+  tasks:
+    - name: set the password in the store to a new value
+      aws_ssm_parameter_store:
+        name: "{{parampath ~ 'db_password' }}"
+        value: '{{new_db_password}}'
+        string_type: SecureString
+        overwrite: True
+
+- hosts: tag___type____ansible_demo_webserver__
+  user: ec2-user
+  become: true
+  become_user: root
+  become_method: sudo
+  vars:
+    parampath: /michael-paddle/demo/
+    db_password: "{{ lookup('aws_ssm', parampath ~ 'db_password', region='us-east-2', ) }}"
+  tasks:
+  - name: database password changed
+    copy: 
+      content: "{{ 'dbservers.mydomain.example.com:5432:main_db:my_user:' ~ db_password }}"
+      dest: /etc/appdb_pgpass
+
+# - hosts: db_servers
+#   tasks:
+#   - name: database password changed
+#     postgresql_user:
+#         login_host: dbservers.mydomain.example.com
+#         login_user: my_user
+#         login_password: "{{ new_db_password }}"
+#         port: 5432

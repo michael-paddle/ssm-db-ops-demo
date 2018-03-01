@@ -11,3 +11,7 @@
 *.~undo-tree
 .#*
 \#*
+
+
+# Ansible temp files
+*.retry

@@ -20,7 +20,6 @@
       debug:
         msg: "listing of creds and other details: {{ result }}"
 
-
     - name: show what account we are using for debugging
       debug:
        msg: "account info: {{ lookup('aws_account_attribute', wantlist='true') }}"
@@ -66,6 +65,7 @@
          state: available
          virtualization-type: hvm
       register: ami_facts_return
+      tags: host
 
     - name: create web servers
       ec2:
@@ -78,10 +78,11 @@
         key_name: "deployer-key"
         exact_count: 3
 #        group: ansible_demo_webserver
-        user_data: "shutdown -h 300 \n"
+        user_data: "#!/bin/bash\nshutdown -h 300 \n"
         instance_initiated_shutdown_behavior: terminate
         instance_tags:
             type: ansible_demo_webserver
+      tags: host
 
     - name: create rds instance
       rds_instance:
